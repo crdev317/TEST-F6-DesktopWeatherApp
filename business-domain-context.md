@@ -2,6 +2,9 @@
 
 The language this product speaks. Definitions only — no implementation, no specs, no decisions.
 
+## Condition
+The human-readable weather state shown to the user — e.g. "Clear sky", "Slight rain", "Thunderstorm". The app derives it from the **Weather Provider**'s numeric weather code (a WMO code); the code is the provider's raw form, the Condition is its presentable form. Part of **Current Conditions** (and, later, the **Forecast**).
+
 ## Current Conditions
 The present-moment weather snapshot for the active Location — the values that describe the weather *right now* (such as temperature, weather condition, and wind). Distinct from a Forecast, which describes *future* weather rather than the present. Sourced from the Weather Provider. The freshness of a displayed snapshot is named by its **Updated-at** time — when *the app last successfully fetched it* — not by any provider-reported observation time.
 
