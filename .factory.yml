@@ -1,0 +1,11 @@
+# .factory.yml — per-repo Factory settings (ADR-0014 §2). The machine-readable companion to
+# CLAUDE.md: the SSOT for which tracker THIS repo's work items live on, read by both the
+# orchestrator and the ADO-touching HITL skills. An `ado:` block ⇒ Azure DevOps mode.
+# REQUIRED — the tracker is declared explicitly; an absent/ambiguous/broken file fails closed
+# (never a silent GitHub default, bug #343). Coordinate charset: [A-Za-z0-9._-] only.
+#
+# `project` is the ADO project ID (GUID), not the display name "Factory DevTest" — the name
+# contains a space, which the coordinate charset forbids (Story #306), so the GUID is used.
+ado:
+  org: Enate
+  project: 4158c5e2-092d-482d-a445-7e910ffbe775
