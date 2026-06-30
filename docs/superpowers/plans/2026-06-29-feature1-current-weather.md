@@ -552,7 +552,8 @@ git commit -m "feat: add Open-Meteo Geocoder with recorded-replay tests (Seam 1)
 ## Task 5: Weather Provider client — recorded-replay (Seam 2)
 
 **Covers Seam 2 (c) contract:** *HTTPS `GET /v1/forecast?latitude=&longitude=&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=celsius&wind_speed_unit=kmh`, no auth; success body has a `current` object with `temperature_2m`/`weather_code`/`wind_speed_10m` (all non-null); the metric unit params must be on the request; non-2xx is an error.*
-**(d) proof:** the recorded-replay tests below, over a fixture captured live on 2026-06-29.
+**Also covers Seam 3 (c) contract (host-OS/locale):** *the outbound `latitude`/`longitude` are formatted invariant-culture (`.` decimal), byte-identical across every host locale — never the host's separator.*
+**(d) proof:** the recorded-replay tests below, over a fixture captured live on 2026-06-29 — plus the `Formats_coordinates_invariantly_under_comma_decimal_locale` test (Step 2) which forces a `de-DE` culture and asserts the wire form is unchanged (Seam 3 (d)).
 
 **Files:**
 - Create: `src/WeatherApp.Core/Weather/IWeatherProvider.cs`, `OpenMeteoWeatherProvider.cs`, `WeatherDtos.cs`
@@ -572,6 +573,7 @@ git commit -m "feat: add Open-Meteo Geocoder with recorded-replay tests (Seam 1)
 `tests/WeatherApp.Tests/Weather/OpenMeteoWeatherProviderTests.cs`:
 
 ```csharp
+using System.Globalization;
 using System.Net;
 using FluentAssertions;
 using WeatherApp.Core.Domain;
@@ -613,6 +615,33 @@ public class OpenMeteoWeatherProviderTests
         query.Should().Contain("wind_speed_unit=kmh");
         query.Should().Contain("latitude=51.5085");   // InvariantCulture decimal point
         query.Should().Contain("current=");
+    }
+
+    // Seam 3 (host-OS/locale) (d) proof: under a comma-decimal culture the default
+    // double.ToString() would emit "51,5" and corrupt the query. Forcing de-DE and
+    // asserting the "."-decimal wire form proves the formatting is invariant, not
+    // host-locale-driven. The locale is the only thing varied vs the test above.
+    [Fact]
+    public async Task Formats_coordinates_invariantly_under_comma_decimal_locale()
+    {
+        var original = CultureInfo.CurrentCulture;
+        CultureInfo.CurrentCulture = new CultureInfo("de-DE");
+        try
+        {
+            var http = StubHttpMessageHandler.ClientReturning(HttpStatusCode.OK, Fixture("forecast-london.json"), out var handler);
+            var provider = new OpenMeteoWeatherProvider(http, new WmoConditionMap());
+
+            await provider.GetCurrent(London, CancellationToken.None);
+
+            var query = handler.LastRequestUri!.Query;
+            query.Should().Contain("latitude=51.5085");    // "." not "," despite de-DE
+            query.Should().Contain("longitude=-0.1257");
+            query.Should().NotContain("51,5");             // the locale-corrupted form must never appear
+        }
+        finally
+        {
+            CultureInfo.CurrentCulture = original;
+        }
     }
 
     [Fact]
@@ -1642,7 +1671,11 @@ git commit -m "test: add Tier-2 live Open-Meteo contract tests"
 ## Self-review notes (for the gauntlet)
 
 - **Spec coverage:** empty state (T9), debounced sequence-guarded search (T6), zero-results & Geocoder-failure messages (T6), explicit candidate pick → activation (T6/T8), fresh weather fetch + Condition (T5/T7), metric units (T5), error states without Retry (T7), no persistence/cache (nothing persists — ADR-0001 honoured). ✓
-- **Seam coverage:** Seam 1 → Task 4 (contract verbatim in the task header; (d) recorded-replay incl. the absent-`results` and nullable-`admin1` cases). Seam 2 → Task 5 (contract verbatim; (d) recorded-replay + metric-param assertion). Both (e)-grounded live on 2026-06-29, captured as fixtures. The in-process activation handoff (excluded as a taxonomy seam) is still covered by Task 8's integration test. ✓
+- **Seam coverage:** Seam 1 → Task 4 (contract verbatim in the task header; (d) recorded-replay incl. the absent-`results` and nullable-`admin1` cases). Seam 2 → Task 5 (contract verbatim; (d) recorded-replay + metric-param assertion). Seam 3 (host-OS/locale coordinate formatting) → Task 5 (contract in the task header; (d) the `Formats_coordinates_invariantly_under_comma_decimal_locale` test that forces `de-DE` and asserts the `.`-decimal wire form). Seams 1–2 (e)-grounded live on 2026-06-29 (captured as fixtures); Seam 3 (e)-grounded in the .NET CultureInfo docs + that same live call's `.`-decimal request. The in-process activation handoff (excluded as a taxonomy seam) is still covered by Task 8's integration test. ✓
 - **Overriding Principle #1 (no secrets):** no keys/tokens anywhere; fixtures contain only public weather data. ✓
-- **Host-OS note pulled forward:** `InvariantCulture` on coordinate formatting (Task 5) pre-empts a locale-decimal-separator bug — flagged so F3 (the first OS-touching Feature) carries the platform-matrix obligation.
+- **Host-OS/locale seam (Seam 3):** `InvariantCulture` on coordinate formatting (Task 5) pre-empts a locale-decimal-separator bug. This is now written as **Seam 3** in the Spec's inventory with a falsifiable (c) (invariant `.`-decimal wire form, byte-identical across locales) and its own (d) — the `de-DE`-forcing round-trip test in Task 5 — rather than only living in code. F3 (the first filesystem/OS-touching Feature) still carries the broader platform-matrix obligation.
+- **fix-feature-docs (2026-06-30) — finding → fix → closure map** (answers the failed `/feature-doc-gauntlet` run recorded in the Spec sign-off; 2 findings → 1 root cause):
+  - *Root cause:* the host-OS/locale coordinate-formatting boundary was crossed in code (Task 5 `InvariantCulture`) but never written as a falsifiable seam contract.
+  - *Fix (joint):* Spec — added **Seam 3** (host-OS/runtime) with full (a)–(e), and tightened **Seam 2 (c)** to state the invariant `.`-decimal coordinate form; updated the inventory preamble from "Two … seams" to three. Plan — Task 5 header now covers Seam 3 (c); added the `Formats_coordinates_invariantly_under_comma_decimal_locale` test as Seam 3 (d); updated this self-review. *Closure:* the inventory now carries a Seam 3 row (grep `Seam 3`), and Seam 2 (c) states the invariant-decimal rule.
+  - *Non-gating observation swept (human decision 2026-06-30):* per-call Open-Meteo request logging is **deferred** for F1 (recorded in the Spec's Out-of-scope) — the host logging substrate stays wired so it can be picked up cheaply later. The other observations (ADR-0001 keep-last-good is an F4 concern; cosmetic ViewModel naming) need no change.
 ```

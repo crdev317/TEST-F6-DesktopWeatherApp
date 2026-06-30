@@ -87,7 +87,7 @@ Per the Technical-Context standard — assert the **deterministic envelope**, ne
 
 ## Seam inventory
 
-Two external network-protocol seams. Both grounded against **live observation of the real Open-Meteo API on 2026-06-29** (read-only GETs, captured during brainstorming) — not model memory. The in-process `SearchViewModel → MainViewModel → WeatherViewModel` activation handoff is **not** a taxonomy seam (in-memory event/method call; code is the authority; covered by the `MainViewModel` integration test) and is deliberately excluded.
+Three seams: two external network-protocol seams (Seams 1–2) and one host-OS/runtime seam (Seam 3 — coordinate formatting vs the host locale). The two network seams are grounded against **live observation of the real Open-Meteo API on 2026-06-29** (read-only GETs, captured during brainstorming) — not model memory. The in-process `SearchViewModel → MainViewModel → WeatherViewModel` activation handoff is **not** a taxonomy seam (in-memory event/method call; code is the authority; covered by the `MainViewModel` integration test) and is deliberately excluded.
 
 **Auth (first contact with Open-Meteo):** the service offers **no authentication** — the free API requires no key, token, or header. We send none. This decision is inherited by reference by both seams below and by every future Open-Meteo seam (F2, F5). Grounded against Open-Meteo's public docs and confirmed live: unauthenticated GETs returned 200 with data.
 
@@ -104,16 +104,25 @@ Two external network-protocol seams. Both grounded against **live observation of
 ### Seam 2: Weather Provider client ↔ Open-Meteo forecast API
 - **(a) class:** network-protocol — **external**
 - **(b) sides:** `WeatherProvider` (our typed `HttpClient`) ↔ Open-Meteo forecast service (`api.open-meteo.com/v1/forecast`)
-- **(c) contract:** HTTPS `GET /v1/forecast?latitude=<lat>&longitude=<lon>&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=celsius&wind_speed_unit=kmh`, no auth.
+- **(c) contract:** HTTPS `GET /v1/forecast?latitude=<lat>&longitude=<lon>&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=celsius&wind_speed_unit=kmh`, no auth. The outbound `<lat>`/`<lon>` are formatted with a **`.` decimal separator regardless of host locale** (invariant-culture), never the host's separator — the host-OS/locale facet of this wire contract is broken out as **Seam 3** below.
   - **Success (HTTP 200):** JSON object containing a **`current`** object with `time` (iso8601 string, non-null), `temperature_2m` (number, non-null), `weather_code` (integer WMO code, non-null), `wind_speed_10m` (number, non-null) — all present because requested. A sibling **`current_units`** object echoes the units (`temperature_2m: "°C"`, `wind_speed_10m: "km/h"`), letting the test assert the metric params took effect. Returned `latitude`/`longitude` may be **grid-snapped** (observed: request 51.5085 → response 51.5) — not an error; we do not assert request==response coords.
   - **`weather_code`** is a WMO code mapped to a **Condition** by the pure WMO map; an unrecognised code maps to "Unknown" (the map never throws).
   - **Error:** non-2xx / `{"error":true,"reason":...}` envelope handled as the inline "couldn't load weather" state.
 - **(d) proof:** Tier-1 recorded-replay test over a fixture captured from this live call, asserting the `current`→`CurrentConditions` map, the metric unit params on the outbound request, and WMO-code handling. Tier-2 live call re-confirms on schedule.
 - **(e) authority:** Open-Meteo Forecast API — live observation on 2026-06-29 (`GET api.open-meteo.com/v1/forecast?latitude=51.5085&longitude=-0.1257&current=temperature_2m,weather_code,wind_speed_10m&temperature_unit=celsius&wind_speed_unit=kmh` → `{"current_units":{"temperature_2m":"°C","weather_code":"wmo code","wind_speed_10m":"km/h"},"current":{"time":"2026-06-29T22:00","temperature_2m":20.4,"weather_code":1,"wind_speed_10m":12.2}}`). Cross-references the public docs at open-meteo.com/en/docs.
 
+### Seam 3: Coordinate formatting ↔ host locale
+- **(a) class:** host-OS/runtime — **internal** (the boundary is the .NET runtime's culture-sensitive number formatting, not an external party)
+- **(b) sides:** `OpenMeteoWeatherProvider.GetCurrent` (building the forecast query string) ↔ the .NET runtime's active `CultureInfo` on the host machine
+- **(c) contract:** The `Location.Latitude`/`Longitude` doubles are serialised into the Seam 2 query string with `CultureInfo.InvariantCulture` so the decimal separator is always **`.`** — independent of the host machine's locale. A comma-decimal locale (e.g. `de-DE`, where the default `double.ToString()` yields `51,5`) would otherwise emit `latitude=51,5`, which Open-Meteo's forecast endpoint parses as two query values / a malformed coordinate, corrupting the request. The contract: **the outbound coordinate is invariant-formatted, byte-identical across every host locale.**
+- **(d) proof:** Tier-1 test that forces a comma-decimal culture (`CultureInfo.CurrentCulture = new CultureInfo("de-DE")` for the duration of the call) and asserts the outbound query still contains `latitude=51.5085` (the `.`-decimal form), proving the formatting does not follow the host locale. This is a real round-trip over the same `StubHttpMessageHandler` used for Seam 2 — the locale is the only thing varied. (Plan Task 5.)
+- **(e) authority:** .NET runtime behaviour — `double.ToString()` is culture-sensitive by default and honours `CultureInfo.CurrentCulture`; `CultureInfo.InvariantCulture` pins the `.` separator. Documented at learn.microsoft.com (`System.Globalization.CultureInfo.InvariantCulture`, "Standard numeric format strings"). The Open-Meteo side of the requirement — that coordinates must use a `.` decimal — is established by the Seam 2 live observation on 2026-06-29 (the working request used `latitude=51.5085`). Not model memory: both halves are grounded (runtime docs + the dated live call).
+
 ## Out of scope (F1)
 
 7-day daily Forecast (F2); persistence / Location Store / launch-restore (F3); manual refresh, Updated-at stamp, keep-last-good, Retry button (F4); hourly Forecast (F5); unit preference (F6); weather icons; debounced-search niceties beyond the 300 ms/2-char rule; "feels like"/humidity/pressure/wind-direction fields.
+
+**Per-call request logging — deferred (deliberate decision, 2026-06-30).** Technical-Context's "log every outbound Open-Meteo call with its outcome" is an *inferred default*, not an Overriding Principle. For F1 (the tracer bullet) the two HTTP clients take no `ILogger` and log no per-call outcome; this is a conscious deferral, not drift. The generic-host logging substrate is still wired (so the obligation can be picked up cheaply later); structured per-call logging lands when a Feature first needs it operationally.
 
 ## Feature-doc-gauntlet sign-off
 
