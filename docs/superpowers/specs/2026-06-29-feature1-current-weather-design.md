@@ -114,3 +114,20 @@ Two external network-protocol seams. Both grounded against **live observation of
 ## Out of scope (F1)
 
 7-day daily Forecast (F2); persistence / Location Store / launch-restore (F3); manual refresh, Updated-at stamp, keep-last-good, Retry button (F4); hourly Forecast (F5); unit preference (F6); weather icons; debounced-search niceties beyond the 300 ms/2-char rule; "feels like"/humidity/pressure/wind-direction fields.
+
+## Feature-doc-gauntlet sign-off
+
+- **Result:** fail
+- **Date:** 2026-06-30
+- **Reason:** feature-docs
+- **Summary:** Two of three leaves passed (check-doc-adr-consistency, check-artefact-consistency). check-seam-cynicism found one root-cause gap: the design crosses a host-OS/runtime (locale) boundary that the Seam inventory does not carry as its own row.
+- **Leaves:** check-seam-cynicism (fail), check-doc-adr-consistency (pass), check-artefact-consistency (pass)
+- **Open findings (route to `/fix-feature-docs`, then re-run the full gauntlet):**
+  - *(check-seam-cynicism — settleable in-session)* The Seam inventory states "Two external network-protocol seams" and excludes only the in-memory handoff, but `OpenMeteoWeatherProvider.GetCurrent` must serialise `Latitude`/`Longitude` culture-invariantly or a comma-decimal locale (e.g. de-DE → `51,5`) corrupts the forecast query string. The taxonomy lists host-OS/runtime as a distinct class; this boundary has no inventory row — its falsifiable contract ("coordinates are formatted with a '.' decimal separator regardless of host locale") and its own proof are folded into Seam 2 / Plan Task 5 rather than written as a seam. Fix: add a host-OS seam row whose (c) is the invariant-decimal wire assertion and whose (d) is a locale-forcing round-trip test (run the existing `latitude=51.5085` assertion under a de-DE `CultureInfo`).
+  - *(check-seam-cynicism)* Spec Seam 2 (c) asserts the coordinate wire format only implicitly; the contract text should state that the outbound coordinate is invariant-culture-formatted with a '.' decimal separator and never the host locale's separator.
+- **Non-gating observations (for human eyes, not blockers):**
+  - *(check-doc-adr-consistency)* ADR-0001's in-session keep-last-good + Updated-at is a refresh-time behaviour deferred to F4; F1 (no refresh) showing a plain inline error is consistent with the ADR.
+  - *(check-artefact-consistency)* Technical-Context's "log every outbound Open-Meteo call" is an *inferred default*, not an Overriding Principle; F1 logs none. Suggest a one-line decision: add logging to F1 or record it as deferred.
+  - *(check-artefact-consistency)* PRD's spaced "Search ViewModel" / "Weather ViewModel" vs Spec/Plan's `SearchViewModel` / `WeatherViewModel` is cosmetic implementation-construct naming, not glossary drift.
+
+> A sign-off that predates later substantive edits to the Spec or Plan is stale. `enate-to-stories` and `check-security-design` MUST refuse to break this Feature into stories until this section shows `Result: pass`.
