@@ -6,6 +6,25 @@ much as the **what**.
 ## [Unreleased] - 2026-07-01
 
 ### Added
+- **Weather ViewModel — fresh-fetch load state machine** (Story #95148) — `WeatherViewModel : ObservableObject`
+  (CommunityToolkit.Mvvm) holding the **Current Conditions** for a Location and driving a load state
+  machine `Idle → Loading → Loaded` on success, `Loading → Error` on a provider failure — the states
+  modelled by a new `WeatherLoadState` enum. `Load(Location)` always fetches fresh from the injected
+  `IWeatherProvider` (ADR-0001: never cache weather) and exposes `Conditions`, `LocationName`, `State`
+  and `ErrorMessage` as bindable properties.
+  - **Neutral copy only on failure** (security acceptance criterion) — a provider failure sets the
+    fixed line *"Couldn't load weather for {name}."* and **never** surfaces the exception type, stack
+    trace, or the request URL (which carries the Location's coordinates), per the Technical-Context
+    "no raw stack trace in UI" / "don't expose personal location beyond the request" principles.
+    Why proven separately: a clean signature can still leak — the guard is a behaviour, not a type.
+  - Proven by **Tier-1 ViewModel tests** with a fake Weather Provider at the seam: success sets
+    `Conditions` + `Loaded`, the state sequence is observed as `Loading → Loaded`, a failure yields
+    `Error` + neutral message with `Conditions` cleared, and a **leak-inducing fake-seam test** feeds
+    an exception whose text carries the type name, stack frame, URL and coordinates and asserts none
+    of them reach `ErrorMessage`.
+  - **Scope of this slice** — Current Conditions only. The rest of the Weather ViewModel contract —
+    the 7-day Forecast, the **Updated-at** stamp, refresh-failure keep-last-good, and the retry
+    affordance — remains later Feature-1 work.
 - **Search ViewModel — debounced, sequence-guarded Location Search** — `SearchViewModel : ObservableObject`
   (CommunityToolkit.Mvvm) orchestrating the **Location Search**: owns `Query`, a `Candidates`
   collection, a `SearchMessage` (zero-results / error line) and `SelectCommand`, and raises
@@ -89,10 +108,11 @@ much as the **what**.
   unknown-code fallback), establishing the first `dotnet test`-green coverage in the repo.
 
 ### Notes
-- The Geocoder (Seam 1), the Weather Provider's Current-Conditions path (Seams 2 & 3), and the
-  Search ViewModel (over the faked Geocoder + debounce-clock seams) are now in. Still to come:
-  the 7-day daily Forecast, the Location Store, the Weather ViewModel, and the MainViewModel
-  activation handoff — those remain separate Feature-1 stories that depend on this core
-  (see `Roadmap.md`).
+- The Geocoder (Seam 1), the Weather Provider's Current-Conditions path (Seams 2 & 3), the
+  Search ViewModel (over the faked Geocoder + debounce-clock seams), and the Weather ViewModel's
+  fresh-fetch load state machine (Current Conditions, over the faked Weather Provider seam) are now
+  in. Still to come: the 7-day daily Forecast, the Location Store, the rest of the Weather ViewModel
+  (Updated-at, refresh keep-last-good, retry), and the MainViewModel activation handoff — those
+  remain separate Feature-1 stories that depend on this core (see `Roadmap.md`).
 - `coverlet.collector` is present in the test project for code-coverage collection; recorded
   in `Technical-Context.MD` Packages-in-use.
