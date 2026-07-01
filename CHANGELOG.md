@@ -6,6 +6,36 @@ much as the **what**.
 ## [Unreleased] - 2026-07-01
 
 ### Added
+- **Search ViewModel — debounced, sequence-guarded Location Search** — `SearchViewModel : ObservableObject`
+  (CommunityToolkit.Mvvm) orchestrating the **Location Search**: owns `Query`, a `Candidates`
+  collection, a `SearchMessage` (zero-results / error line) and `SelectCommand`, and raises
+  `LocationSelected(Location)` on explicit selection (the activation handoff to the Weather side).
+  - **Debounce** — typing schedules the Geocoder call through an injected `IDebounceScheduler`
+    after a **300 ms** delay, so rapid typing collapses to a single call. The clock is a seam
+    (`DebounceScheduler`, backed by a `System.Timers.Timer`) so Tier-1 tests fire it synchronously
+    with a fake — no real time, no real network. The production scheduler marshals the action onto
+    the `SynchronizationContext` captured at `Schedule` time (the UI thread), so post-await state
+    mutations stay on the UI thread.
+  - **Min-length short-circuit** — a `Query` of **fewer than 2 characters** clears `Candidates`
+    and makes no Geocoder call — why: single-character queries are noise and waste a request.
+  - **Sequence guard (guard-on-arrival)** — each debounced run takes a monotonically increasing
+    `searchSeq` and cancels any prior in-flight token; results are applied **only if the run is
+    still the latest** — why: debounced continuations resume on arbitrary ThreadPool threads and
+    out-of-order Geocoder responses would otherwise render stale candidates over a newer query.
+    The guard's shared counter is accessed under an explicit memory barrier
+    (`Interlocked.Increment` on write, `Volatile.Read` on the arrival/exception checks) — a plain
+    `++`/`!=` risked a torn/stale read across threads that could make the guard misfire.
+  - **Neutral copy only on failure** (security acceptance criterion) — any Geocoder failure
+    surfaces the fixed line *"Couldn't search right now — check your connection and try again."*
+    and **never** the exception text/stack trace or the request URL (which carries the query),
+    per the Technical-Context "no raw stack trace in UI" / "don't expose personal data beyond the
+    request" principles. A stale failure (superseded by a newer search) is dropped silently.
+  - Zero candidates gives a *"No places found for …"* message (not an error), leaving the current
+    view otherwise untouched.
+  - Proven by **Tier-1 ViewModel tests** with a fake Geocoder at the seam and a manual
+    (fake) debounce clock: debounce collapse, min-length short-circuit, stale-response drop
+    (latest-query-wins), zero-results copy, neutral failure copy, and `SelectCommand` raising
+    `LocationSelected` with the correct `Location`.
 - **Open-Meteo Weather Provider (Seams 2 & 3)** — `OpenMeteoWeatherProvider : IWeatherProvider`,
   a typed `HttpClient` over Open-Meteo's forecast API. `GetCurrent(Location, CancellationToken)`
   issues `GET v1/forecast` requesting the `current` block (`temperature_2m,weather_code,wind_speed_10m`)
@@ -59,8 +89,10 @@ much as the **what**.
   unknown-code fallback), establishing the first `dotnet test`-green coverage in the repo.
 
 ### Notes
-- The Geocoder (Seam 1) and the Weather Provider's Current-Conditions path (Seams 2 & 3) are now in.
-  Still to come: the 7-day daily Forecast, the Location Store, and the ViewModels — those remain
-  separate Feature-1 stories that depend on this core (see `Roadmap.md`).
+- The Geocoder (Seam 1), the Weather Provider's Current-Conditions path (Seams 2 & 3), and the
+  Search ViewModel (over the faked Geocoder + debounce-clock seams) are now in. Still to come:
+  the 7-day daily Forecast, the Location Store, the Weather ViewModel, and the MainViewModel
+  activation handoff — those remain separate Feature-1 stories that depend on this core
+  (see `Roadmap.md`).
 - `coverlet.collector` is present in the test project for code-coverage collection; recorded
   in `Technical-Context.MD` Packages-in-use.
