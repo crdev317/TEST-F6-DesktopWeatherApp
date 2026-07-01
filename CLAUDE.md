@@ -28,6 +28,12 @@ Authority order (lower wins): **ADR > Technical-Context > business-domain-contex
 
 ## Dev commands
 
-<!-- TODO(init): fill once the stack is chosen — install / test tiers / run.
-     Written by /init-tech-context or the first feature build. -->
-_Dev commands not set yet — filled when the stack is chosen (`/init-tech-context`)._
+Stack: **WPF on .NET 8 (C#)**, built and tested with the `dotnet` CLI. Solution: `WeatherApp.sln`.
+
+- **Restore:** `dotnet restore WeatherApp.sln` (uses the repo-local `nuget.config` pinning nuget.org).
+- **Build:** `dotnet build WeatherApp.sln`
+- **Test:** `dotnet test WeatherApp.sln` (xUnit; Tier-1 recorded-replay tests read `Fixtures/**/*.json` copied to output).
+- **Run:** `dotnet run --project src/WeatherApp/WeatherApp.csproj`
+
+Layout: `src/WeatherApp.Core/` (class lib, net8.0), `src/WeatherApp/` (WPF shell, net8.0-windows),
+`tests/WeatherApp.Tests/` (xUnit, net8.0).
