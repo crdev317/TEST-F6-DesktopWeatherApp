@@ -42,4 +42,60 @@ public class DebounceSchedulerTests
         await Task.Delay(120); // give any wrongly-surviving first action time to also fire
         count.Should().Be(1);
     }
+
+    // Records every Post and runs the callback inline, standing in for the WPF
+    // dispatcher's synchronisation context so the test can assert the scheduled
+    // action (and its continuation) is marshalled onto the captured UI context.
+    private sealed class RecordingSynchronizationContext : SynchronizationContext
+    {
+        private int _postCount;
+        public int PostCount => _postCount;
+
+        public override void Post(SendOrPostCallback d, object? state)
+        {
+            Interlocked.Increment(ref _postCount);
+            // Model a real UI-thread dispatcher: the posted callback observes this
+            // context as SynchronizationContext.Current while it runs.
+            var previous = Current;
+            SetSynchronizationContext(this);
+            try
+            {
+                d(state);
+            }
+            finally
+            {
+                SetSynchronizationContext(previous);
+            }
+        }
+    }
+
+    [Fact]
+    public async Task Runs_the_scheduled_action_on_the_synchronization_context_captured_when_scheduled()
+    {
+        var previous = SynchronizationContext.Current;
+        var recording = new RecordingSynchronizationContext();
+        SynchronizationContext? observedInsideAction = null;
+        var done = false;
+        try
+        {
+            SynchronizationContext.SetSynchronizationContext(recording);
+            using var scheduler = new DebounceScheduler();
+
+            scheduler.Schedule(TimeSpan.FromMilliseconds(20), () =>
+            {
+                observedInsideAction = SynchronizationContext.Current;
+                done = true;
+                return Task.CompletedTask;
+            });
+
+            (await Eventually(() => done)).Should().BeTrue();
+        }
+        finally
+        {
+            SynchronizationContext.SetSynchronizationContext(previous);
+        }
+
+        recording.PostCount.Should().BeGreaterThan(0);
+        observedInsideAction.Should().BeSameAs(recording);
+    }
 }
