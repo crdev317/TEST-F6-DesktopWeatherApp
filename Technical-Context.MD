@@ -22,7 +22,7 @@ The default set a code-writing agent reaches for first — prefer these before p
 **JSON:** `System.Text.Json` — request/response (de)serialisation; no Newtonsoft unless a concrete gap forces it
 **MVVM:** `CommunityToolkit.Mvvm` — `ObservableObject`, `RelayCommand`, source-generated bindable properties
 **DI / config / logging:** `Microsoft.Extensions.DependencyInjection`, `.Configuration`, `.Logging`, `.Hosting` (generic host)
-**Testing:** `xUnit` (test runner), `FluentAssertions` (assertions), `Moq` (unit-level fakes at seams)
+**Testing:** `xUnit` (test runner), `FluentAssertions` (assertions), `Moq` (unit-level fakes at seams), `coverlet.collector` (code-coverage collection)
 
 ## Instrumentation
 Logging is via `Microsoft.Extensions.Logging` to the **console / stdout (debug output)** — no log file, no cloud telemetry at this stage. ERROR level is always logged. Every outbound Open-Meteo call is logged with its outcome (request target + success/failure + status). Never log secrets (none today) or full personal location data beyond what the request needs.
