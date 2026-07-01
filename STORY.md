@@ -8,14 +8,19 @@ AFK — autonomously deliverable.
 
 ## What to build
 
-Scaffold the whole solution so every later slice has somewhere to land: a `net8.0` Core class library (`WeatherApp.Core`, no WPF), a `net8.0-windows` WPF shell (`WeatherApp`), and a `net8.0` xUnit test project (`WeatherApp.Tests`), wired into one `WeatherApp.sln` with project references (shell → Core, tests → Core) and the agreed packages (CommunityToolkit.Mvvm + Microsoft.Extensions.Http on Core; Microsoft.Extensions.Hosting on the shell; FluentAssertions + Moq on tests). Mark test JSON fixtures to copy to output. Prove the substrate runs with a trivial smoke test.
+The pure, I/O-free core every other slice binds to: the three immutable domain records and the total WMO-code→Condition map.
+
+- `LocationCandidate(Name, Admin1?, Country, Latitude, Longitude)` — `Admin1` (region) is **nullable** (the Geocoder omits it for some places).
+- `Location(Name, Latitude, Longitude)` — the single active place.
+- `CurrentConditions(TemperatureC, WindSpeedKmh, Condition)`.
+- `WmoConditionMap.ToCondition(int)` — maps known WMO codes to labels; an unrecognised code returns &quot;Unknown&quot; and the map never throws (pure and total).
 
 ## Acceptance criteria
 
-- [ ] `WeatherApp.sln` contains the three projects with the correct target frameworks (`net8.0`, `net8.0-windows`, `net8.0`).
-- [ ] Project references wired: shell → Core, tests → Core.
-- [ ] Packages added per Plan Task 1 Step 2; `Fixtures\**\*.json` set to `CopyToOutputDirectory=PreserveNewest`.
-- [ ] A smoke test exists; `dotnet build &amp;&amp; dotnet test` succeeds with 1 passing test.
+- [ ] The three records exist as immutable `sealed record` types with the fields and nullability above.
+- [ ] `WmoConditionMap.ToCondition` returns the expected label for known codes (e.g. 0→Clear sky, 2→Partly cloudy, 45→Fog, 61→Slight rain, 71→Slight snowfall, 95→Thunderstorm).
+- [ ] An unknown code returns &quot;Unknown&quot;; the map never throws.
+- [ ] Tier-1 unit tests cover known codes + the unknown-code fallback; `dotnet test` green.
 
 ## Context references
 
@@ -26,8 +31,8 @@ Scaffold the whole solution so every later slice has somewhere to land: a `net8.
 
 ## Blocked by
 
-None - can start immediately.
+- #95143 (Scaffold the solution).
 
 ## Blocks
 
-- Every other F1 story (this is the foundation). Directly unblocks &quot;Domain records + WMO Condition map&quot;.
+- &quot;Geocoder client (Seam 1)&quot;, &quot;Weather Provider client (Seams 2 &amp; 3)&quot;, and transitively the ViewModels (all consume these types).
