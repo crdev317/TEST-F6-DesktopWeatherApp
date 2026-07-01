@@ -27,8 +27,13 @@ WPF on .NET 8 (C#), MVVM via `CommunityToolkit.Mvvm`, `IHttpClientFactory` for H
 ```sh
 dotnet restore WeatherApp.sln
 dotnet build WeatherApp.sln
-dotnet test WeatherApp.sln
+dotnet test WeatherApp.sln --filter Tier!=Live   # every-commit Tier-1 (recorded-replay)
 dotnet run --project src/WeatherApp/WeatherApp.csproj
 ```
+
+Tests come in two tiers. **Tier-1** (recorded-replay, every commit) runs fully offline against
+recorded fixtures. **Tier-2** (`dotnet test WeatherApp.sln --filter Tier=Live`) makes real,
+disposable calls to the live Open-Meteo endpoints to confirm the recorded fixtures still match the
+real contract — run on a schedule, not on every commit. Plain `dotnet test WeatherApp.sln` runs both.
 
 Restore uses the repo-local `nuget.config` (pins nuget.org) so it is reproducible in CI.

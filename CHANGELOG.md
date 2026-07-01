@@ -6,6 +6,22 @@ much as the **what**.
 ## [Unreleased] - 2026-07-01
 
 ### Added
+- **Tier-2 live Open-Meteo contract tests** (Story #95151) — `OpenMeteoLiveTests`
+  (`tests/WeatherApp.Tests/Live/OpenMeteoLiveTests.cs`), the first realisation of the Tier-2
+  tier the testing standard planned for. Two `[Fact]`s make **one real disposable call each** to
+  the live Open-Meteo geocoding (`OpenMeteoGeocoder.Search("London", …)`) and forecast
+  (`OpenMeteoWeatherProvider.GetCurrent(…)`) endpoints and assert only on the **deterministic
+  response envelope** — the geocoder returns candidates with non-empty name/country; the provider
+  returns a non-empty `Condition` (proving the `current` block parsed and the total WMO map fired).
+  - **Shape, never value** — deliberately never asserts on volatile weather (temperature, wind, the
+    specific Condition) — why: the point is to confirm the recorded Tier-1 fixtures still match the
+    real contract (fields present, types/nullability), catching provider-side drift, not to pin
+    weather that changes minute to minute (per Technical-Context "test the contract, not the live
+    service").
+  - **Tier trait gates them out of every-commit runs** — the class carries `[Trait("Tier", "Live")]`
+    so the every-commit Tier-1 run excludes them via `dotnet test --filter Tier!=Live`; the scheduled
+    live run is `dotnet test --filter Tier=Live` — why: live calls have real cost/flakiness and must
+    not gate every commit.
 - **Weather ViewModel — fresh-fetch load state machine** (Story #95148) — `WeatherViewModel : ObservableObject`
   (CommunityToolkit.Mvvm) holding the **Current Conditions** for a Location and driving a load state
   machine `Idle → Loading → Loaded` on success, `Loading → Error` on a provider failure — the states
