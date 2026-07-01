@@ -1,0 +1,125 @@
+flowchart TB
+
+  %% ==================== HITL 1 ====================
+  subgraph H1["HITL 1 — Project Setup (once per product)"]
+    np([New Project]):::start
+    ir["/init-repo"]:::skill
+    irO1[/new Git repo + branch policies/]:::output
+    irO2[/CLAUDE.md in git/]:::output
+    itc["/init-tech-context"]:::skill
+    itcO[/technical-context.md in git/]:::output
+    ic["/init-context"]:::skill
+    icO[/business-domain-context.md in git/]:::output
+
+    np --> ir
+    ir -- builds --> irO1
+    ir -- builds --> irO2
+    ir --> itc
+    itc -- builds --> itcO
+    itc --> ic
+    ic -- builds --> icO
+  end
+
+  %% ==================== HITL 2 ====================
+  subgraph H2["HITL 2 — Epic & Roadmap Planning (once per epic)"]
+    ne([New Epic / Major Feature]):::start
+    gwdI[/context.md in git/]:::input
+    gwd["/grill-with-docs"]:::skill
+    gwdO[/context.md in git/]:::output
+    toprd["/to-prd"]:::skill
+    toprdO[/prd.md in git/]:::output
+    rmI[/prd.md in git/]:::input
+    rmap["/roadmap"]:::skill
+    rmO[/roadmap.md — ordered Feature list/]:::output
+
+    ne --> gwd
+    gwdI -- reads --> gwd
+    gwd -- builds --> gwdO
+    gwd --> toprd
+    toprd -- builds --> toprdO
+    toprd --> rmap
+    rmI -- reads --> rmap
+    rmap -- builds --> rmO
+  end
+
+  %% ==================== HITL 3 ====================
+  subgraph H3["HITL 3 — Feature Design (loop per Roadmap Feature)"]
+    fstart([Deliver next Feature]):::start
+    bsI[/PRD + Roadmap in git/]:::input
+    bs["/brainstorming"]:::skill
+    wpI[/Context.MD + ADRs in git/]:::input
+    wp["/writing-plans"]:::skill
+    pub["/publish-feature"]:::skill
+    pubO1[/"Spec = ADO Description field"/]:::output
+    pubO2[/"Plan = ADO Impl. Plan field"/]:::output
+    gaunt["/feature-doc-gauntlet"]:::skill
+    gate{Docs pass?}:::gate
+    fix["/fix-feature-docs"]:::skill
+    e2s["/enate-to-stories"]:::skill
+    e2sO[/Functional User Stories in ADO/]:::output
+    csd["/check-security-design"]:::skill
+    csdO[/Security User Stories in ADO/]:::output
+    tri["/triage"]:::skill
+
+    fstart --> bs
+    bsI -- reads --> bs
+    bs --> wp
+    wpI -- reads --> wp
+    wp --> pub
+    pub -- builds --> pubO1
+    pub -- builds --> pubO2
+    pub --> gaunt
+    gaunt --> gate
+    gate -- No --> fix
+    fix --> gaunt
+    gate -- Yes --> e2s
+    e2s -- builds --> e2sO
+    e2s --> csd
+    csd -- builds --> csdO
+    csd --> tri
+  end
+
+  human["HUMAN clears Stories to Agent Ready"]:::human
+
+  %% ==================== AFK ====================
+  subgraph AFK["AFK — Autonomous production line (orchestrator state machine)"]
+    AR([Agent Ready]):::state
+    cir["/check-implementation-readiness"]:::skill
+    IR([Implementation Ready]):::state
+    tdd["/tdd"]:::skill
+    ID([Implementation Done]):::state
+    REV([In Review]):::state
+    crg["/code-review-gauntlet"]:::skill
+    FIXs([Fixing: Code Review]):::state
+    fcr["/fix-code-review"]:::skill
+    FIN([Finalizing]):::state
+    finz["/finalization"]:::skill
+    APP([Approved]):::state
+    DONE([Done]):::terminal
+    FAIL([Failed: Needs Human]):::fail
+
+    AR --> cir --> IR --> tdd --> ID -- e2e seam --> REV --> crg
+    crg -- pass --> FIN --> finz --> APP -- merge --> DONE
+    crg -- fail·under cap --> FIXs --> fcr --> REV
+    crg -- fail·at cap --> FAIL
+    cir -. readiness .-> FAIL
+    tdd -. implementation .-> FAIL
+    finz -. adr / docs-sync .-> FAIL
+    FAIL -. human re-clears .-> AR
+  end
+
+  %% ==================== phase chaining (top → bottom) ====================
+  ic ==> ne
+  rmap ==> fstart
+  tri --> human
+  human ==> AR
+
+  classDef skill fill:#fed7aa,stroke:#ea580c,color:#7c2d12;
+  classDef input fill:#ede9fe,stroke:#7c3aed,color:#4c1d95;
+  classDef output fill:#dcfce7,stroke:#16a34a,color:#14532d;
+  classDef state fill:#dbeafe,stroke:#2563eb,color:#1e3a8a;
+  classDef gate fill:#ffffff,stroke:#dc2626,color:#7f1d1d;
+  classDef human fill:#fef3c7,stroke:#d97706,color:#7c2d12;
+  classDef start fill:#fecaca,stroke:#dc2626,color:#7f1d1d;
+  classDef fail fill:#fee2e2,stroke:#dc2626,color:#7f1d1d;
+  classDef terminal fill:#bbf7d0,stroke:#16a34a,color:#14532d;
