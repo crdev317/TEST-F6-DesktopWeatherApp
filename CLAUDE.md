@@ -32,7 +32,8 @@ Stack: **WPF on .NET 8 (C#)**, built and tested with the `dotnet` CLI. Solution:
 
 - **Restore:** `dotnet restore WeatherApp.sln` (uses the repo-local `nuget.config` pinning nuget.org).
 - **Build:** `dotnet build WeatherApp.sln`
-- **Test:** `dotnet test WeatherApp.sln` (xUnit; Tier-1 recorded-replay tests read `Fixtures/**/*.json` copied to output).
+- **Test (every commit, Tier-1):** `dotnet test WeatherApp.sln --filter Tier!=Live` (xUnit; Tier-1 recorded-replay tests read `Fixtures/**/*.json` copied to output). Plain `dotnet test WeatherApp.sln` runs everything.
+- **Test (scheduled, Tier-2 live):** `dotnet test WeatherApp.sln --filter Tier=Live` — live disposable calls against the real Open-Meteo endpoint (`tests/WeatherApp.Tests/Live/`); not run on every commit.
 - **Run:** `dotnet run --project src/WeatherApp/WeatherApp.csproj`
 
 Layout: `src/WeatherApp.Core/` (class lib, net8.0), `src/WeatherApp/` (WPF shell, net8.0-windows),
