@@ -1,12 +1,72 @@
-﻿<Window x:Class="WeatherApp.MainWindow"
+<Window x:Class="WeatherApp.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
-        xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         xmlns:local="clr-namespace:WeatherApp"
-        mc:Ignorable="d"
-        Title="MainWindow" Height="450" Width="800">
-    <Grid>
+        xmlns:vm="clr-namespace:WeatherApp.Core.ViewModels;assembly=WeatherApp.Core"
+        Title="Weather" Height="480" Width="380">
+    <Window.Resources>
+        <local:NullToCollapsedConverter x:Key="NullToCollapsed"/>
+        <local:EmptyStateToVisibleConverter x:Key="EmptyToVisible"/>
+        <local:WeatherStateToVisibleConverter x:Key="WeatherToVisible"/>
+        <local:LoadStateToVisibleConverter x:Key="LoadStateToVisible"/>
+    </Window.Resources>
+    <Grid Margin="16">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="*"/>
+        </Grid.RowDefinitions>
 
+        <!-- Search box (always visible) -->
+        <TextBox Grid.Row="0"
+                 Text="{Binding Search.Query, UpdateSourceTrigger=PropertyChanged, Delay=0}"
+                 FontSize="16" Padding="6"/>
+
+        <!-- Candidate panel + search messages (driven by SearchViewModel) -->
+        <StackPanel Grid.Row="1" Margin="0,8,0,0">
+            <TextBlock Text="{Binding Search.SearchMessage}"
+                       Visibility="{Binding Search.SearchMessage, Converter={StaticResource NullToCollapsed}}"
+                       Foreground="#A33" TextWrapping="Wrap"/>
+            <ListBox ItemsSource="{Binding Search.Candidates}" MaxHeight="180">
+                <ListBox.ItemTemplate>
+                    <DataTemplate>
+                        <StackPanel Orientation="Horizontal">
+                            <TextBlock Text="{Binding Name}" FontWeight="Bold"/>
+                            <TextBlock Text="{Binding Admin1}" Margin="6,0,0,0" Foreground="#666"/>
+                            <TextBlock Text="{Binding Country}" Margin="6,0,0,0" Foreground="#999"/>
+                        </StackPanel>
+                    </DataTemplate>
+                </ListBox.ItemTemplate>
+                <ListBox.InputBindings>
+                    <MouseBinding MouseAction="LeftDoubleClick"
+                                  Command="{Binding Search.SelectCommand}"
+                                  CommandParameter="{Binding SelectedItem, RelativeSource={RelativeSource AncestorType=ListBox}}"/>
+                </ListBox.InputBindings>
+            </ListBox>
+        </StackPanel>
+
+        <!-- Body: empty prompt OR weather -->
+        <Grid Grid.Row="2" Margin="0,16,0,0">
+            <TextBlock Text="Search for a place to see its weather."
+                       Foreground="#888" FontSize="14"
+                       Visibility="{Binding ViewState, Converter={StaticResource EmptyToVisible}}"/>
+
+            <StackPanel Visibility="{Binding ViewState, Converter={StaticResource WeatherToVisible}}">
+                <TextBlock Text="{Binding Weather.LocationName}" FontSize="22" FontWeight="Bold"/>
+                <TextBlock Text="Loading…"
+                           Visibility="{Binding Weather.State, Converter={StaticResource LoadStateToVisible}, ConverterParameter=Loading}"/>
+                <TextBlock Text="{Binding Weather.ErrorMessage}" Foreground="#A33" TextWrapping="Wrap"
+                           Visibility="{Binding Weather.ErrorMessage, Converter={StaticResource NullToCollapsed}}"/>
+                <StackPanel Visibility="{Binding Weather.State, Converter={StaticResource LoadStateToVisible}, ConverterParameter=Loaded}">
+                    <TextBlock FontSize="40">
+                        <Run Text="{Binding Weather.Conditions.TemperatureC, Mode=OneWay}"/><Run Text=" °C"/>
+                    </TextBlock>
+                    <TextBlock FontSize="16" Text="{Binding Weather.Conditions.Condition}"/>
+                    <TextBlock FontSize="14" Foreground="#666">
+                        <Run Text="Wind "/><Run Text="{Binding Weather.Conditions.WindSpeedKmh, Mode=OneWay}"/><Run Text=" km/h"/>
+                    </TextBlock>
+                </StackPanel>
+            </StackPanel>
+        </Grid>
     </Grid>
 </Window>

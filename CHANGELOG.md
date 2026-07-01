@@ -6,6 +6,31 @@ much as the **what**.
 ## [Unreleased] - 2026-07-01
 
 ### Added
+- **WPF shell — generic host, DI, search + weather views** (Story #95150) — the WPF app is now
+  wired on the **.NET generic host**. `App.xaml.cs` builds an `IHost` (`Host.CreateDefaultBuilder`,
+  DI + logging) as the composition root; `App.xaml` carries **no StartupUri** — `OnStartup` resolves
+  `MainWindow`, sets its `DataContext` to a resolved `MainViewModel`, and shows it, and `OnExit`
+  disposes the host. DI registers **two typed HttpClients** (`AddHttpClient<IGeocoder, OpenMeteoGeocoder>`,
+  `AddHttpClient<IWeatherProvider, OpenMeteoWeatherProvider>`), the `WmoConditionMap`, the
+  `IDebounceScheduler`, the three ViewModels and `MainWindow`. `MainWindow.xaml` binds the shell:
+  an always-visible search box, a candidate list + search-message panel bound to `Search`
+  (left-double-click raises `SelectCommand` with the selected candidate), and a body that switches
+  the **Empty** search prompt vs the **Weather** view off `ViewState`, showing temperature (°C),
+  Condition, wind (km/h) and the Loading/Error states. `MainWindow.xaml.cs` is `InitializeComponent`
+  only — all state lives in the ViewModels.
+  - **Distinct `https://` base hosts, TLS left intact** (security acceptance criteria) — the two typed
+    clients get distinct base addresses (`https://geocoding-api.open-meteo.com/` vs
+    `https://api.open-meteo.com/`), both **`https`**, and no code registers a
+    `ServerCertificateCustomValidationCallback` / `DangerousAcceptAnyServerCertificateValidator` — why:
+    the user's searched place name and coordinates travel over these hops and must stay encrypted and
+    authenticated.
+  - **Four `IValueConverter`s** (`Converters.cs`) back the bindings: `NullToCollapsedConverter`
+    (show a message panel only when there is a message), `EmptyStateToVisibleConverter` /
+    `WeatherStateToVisibleConverter` (switch the body off `WeatherViewState`), and a parameterised
+    `LoadStateToVisibleConverter` (one converter driving both the Loading and Loaded readouts off
+    `WeatherLoadState` via `ConverterParameter`). All are one-way (`ConvertBack` throws).
+  - **No unit tests by design** — the XAML/host wiring is build-checkable on Windows and its runtime
+    behaviour is covered by the separate Tier-3 manual verification story, not by Tier-1 tests.
 - **MainViewModel — shell-mediated activation handoff** (Story #95149) — `MainViewModel : ObservableObject`
   (CommunityToolkit.Mvvm), the shell that **owns** the two child ViewModels (`Search`, `Weather`) and
   mediates the **activation handoff** between them. It is the **sole subscriber** to
@@ -142,10 +167,11 @@ much as the **what**.
 ### Notes
 - The Geocoder (Seam 1), the Weather Provider's Current-Conditions path (Seams 2 & 3), the
   Search ViewModel (over the faked Geocoder + debounce-clock seams), the Weather ViewModel's
-  fresh-fetch load state machine (Current Conditions, over the faked Weather Provider seam), and the
-  MainViewModel activation handoff (shell wiring the two children) are now in. Still to come: the
-  7-day daily Forecast, the Location Store, the rest of the Weather ViewModel (Updated-at, refresh
-  keep-last-good, retry), and the WPF shell (host wiring, DI & XAML views that bind the MainViewModel)
-  — those remain separate Feature-1 stories that depend on this core (see `Roadmap.md`).
+  fresh-fetch load state machine (Current Conditions, over the faked Weather Provider seam), the
+  MainViewModel activation handoff (shell wiring the two children), and now the **WPF shell itself**
+  (generic host, DI & XAML views binding the MainViewModel) are in. Still to come: the
+  7-day daily Forecast, the Location Store, and the rest of the Weather ViewModel (Updated-at, refresh
+  keep-last-good, retry) — those remain separate Feature-1 stories that depend on this core (see
+  `Roadmap.md`).
 - `coverlet.collector` is present in the test project for code-coverage collection; recorded
   in `Technical-Context.MD` Packages-in-use.
