@@ -6,6 +6,22 @@ much as the **what**.
 ## [Unreleased] - 2026-07-01
 
 ### Added
+- **MainViewModel — shell-mediated activation handoff** (Story #95149) — `MainViewModel : ObservableObject`
+  (CommunityToolkit.Mvvm), the shell that **owns** the two child ViewModels (`Search`, `Weather`) and
+  mediates the **activation handoff** between them. It is the **sole subscriber** to
+  `SearchViewModel.LocationSelected`; on a selection it flips `ViewState` from `Empty` to `Weather`
+  (a new `WeatherViewState` enum) and calls `WeatherViewModel.Load(location)`. Starts in the `Empty`
+  state (first-run search prompt). It also exposes the in-flight load as an awaitable `LastActivation`
+  so callers/tests can await activation completion.
+  - **Approach A — shell-mediated composition, chosen over child-to-child wiring** — the two children
+    **never reference each other**; all coupling flows through the shell. Why: keeping the search and
+    weather sides mutually ignorant means either can be tested (and later re-composed) in isolation, and
+    the handoff rule (select → activate → fresh fetch) lives in exactly one place instead of being smeared
+    across the children.
+  - Proven by a **Tier-1 integration test** over the *real* child ViewModels wired to fake seams
+    (`FakeGeocoder`, `FakeWeatherProvider`) — the in-process activation integration point named in the
+    Spec, exercised here rather than as a taxonomy seam: starts `Empty`; a `SelectCommand` on the search
+    child drives the shell to `Weather` and the weather child to `Loaded` with the selected Location's name.
 - **Tier-2 live Open-Meteo contract tests** (Story #95151) — `OpenMeteoLiveTests`
   (`tests/WeatherApp.Tests/Live/OpenMeteoLiveTests.cs`), the first realisation of the Tier-2
   tier the testing standard planned for. Two `[Fact]`s make **one real disposable call each** to
@@ -125,10 +141,11 @@ much as the **what**.
 
 ### Notes
 - The Geocoder (Seam 1), the Weather Provider's Current-Conditions path (Seams 2 & 3), the
-  Search ViewModel (over the faked Geocoder + debounce-clock seams), and the Weather ViewModel's
-  fresh-fetch load state machine (Current Conditions, over the faked Weather Provider seam) are now
-  in. Still to come: the 7-day daily Forecast, the Location Store, the rest of the Weather ViewModel
-  (Updated-at, refresh keep-last-good, retry), and the MainViewModel activation handoff — those
-  remain separate Feature-1 stories that depend on this core (see `Roadmap.md`).
+  Search ViewModel (over the faked Geocoder + debounce-clock seams), the Weather ViewModel's
+  fresh-fetch load state machine (Current Conditions, over the faked Weather Provider seam), and the
+  MainViewModel activation handoff (shell wiring the two children) are now in. Still to come: the
+  7-day daily Forecast, the Location Store, the rest of the Weather ViewModel (Updated-at, refresh
+  keep-last-good, retry), and the WPF shell (host wiring, DI & XAML views that bind the MainViewModel)
+  — those remain separate Feature-1 stories that depend on this core (see `Roadmap.md`).
 - `coverlet.collector` is present in the test project for code-coverage collection; recorded
   in `Technical-Context.MD` Packages-in-use.
