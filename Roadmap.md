@@ -11,6 +11,8 @@ Features are listed in delivery order. Each Feature gets its own `/brainstorming
 
 ## Feature 1: See the current weather for a place you search 🔫 *tracer bullet*
 
+**Status:** **Published to ADO** — Feature [#95088](https://dev.azure.com/Enate/4158c5e2-092d-482d-a445-7e910ffbe775/_workitems/edit/95088), 2026-06-29 (Spec → Description, Plan → Implementation Plan field).
+
 The app opens to an empty state with a search prompt. The user types a place name, the **Geocoder** returns candidates, and the user explicitly picks one — making it the active **Location**. The app then fetches and shows that Location's **Current Conditions** (temperature, condition, wind) in fixed metric units.
 
 **Out of scope:** the 7-day daily **Forecast**; persistence across restarts; manual refresh and the **Updated-at** stamp; polished failure states (keep-last-good, retry affordances). F1 carries only the minimal inline "couldn't load" / "no places found" messages needed to not crash.
