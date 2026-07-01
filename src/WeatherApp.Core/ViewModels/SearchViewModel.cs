@@ -45,7 +45,7 @@ public sealed partial class SearchViewModel : ObservableObject
 
     private async Task RunSearchAsync(string query)
     {
-        var seq = ++_latestSeq;
+        var seq = Interlocked.Increment(ref _latestSeq);
         _cts?.Cancel();
         _cts = new CancellationTokenSource();
         var ct = _cts.Token;
@@ -53,12 +53,12 @@ public sealed partial class SearchViewModel : ObservableObject
         try
         {
             var results = await _geocoder.Search(query, ct);
-            if (seq != _latestSeq) return; // stale — a newer search superseded this one
+            if (seq != Volatile.Read(ref _latestSeq)) return; // stale — a newer search superseded this one
             Candidates.Clear();
             foreach (var c in results) Candidates.Add(c);
             SearchMessage = results.Count == 0 ? $"No places found for “{query}”." : null;
         }
-        catch (Exception) when (seq == _latestSeq)
+        catch (Exception) when (seq == Volatile.Read(ref _latestSeq))
         {
             // Fixed neutral copy only: never surface the exception text/stack trace
             // or the request URL (which carries the query). See the Story's security
