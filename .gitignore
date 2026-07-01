@@ -19,3 +19,11 @@ out/
 
 # AFK orchestrator run artifacts — must never be committed
 .orchestrator/
+
+# .NET build output
+[Bb]in/
+[Oo]bj/
+*.user
+
+# Visual Studio / Rider
+.vs/
