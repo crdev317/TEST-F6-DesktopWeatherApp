@@ -25,6 +25,8 @@ The app opens to an empty state with a search prompt. The user types a place nam
 
 ## Feature 2: See the 7-day daily Forecast for the active Location
 
+**Status:** **Published to ADO** — Feature [#95248](https://dev.azure.com/Enate/4158c5e2-092d-482d-a445-7e910ffbe775/_workitems/edit/95248), 2026-07-02 (Spec → Description, Plan → Implementation Plan field).
+
 The weather view gains a 7-day daily **Forecast** strip — per-day high/low and condition — fetched from the **Weather Provider client** alongside Current Conditions. Completes the core "what's it like now *and* this week" value.
 
 **Out of scope:** hourly Forecast (Feature 5); persistence; refresh.
