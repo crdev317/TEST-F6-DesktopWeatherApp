@@ -107,3 +107,18 @@ Two seams: the extended external network-protocol seam to the Open-Meteo forecas
 Hourly Forecast (F5); persistence / Location Store / launch-restore (F3); manual refresh, Updated-at stamp, keep-last-good, Retry (F4); unit preference (F6); weather icons; per-day extras (precipitation, sunrise/sunset, wind); configurable day count; independent Forecast-failure degradation (F4's graceful-failure work).
 
 **Per-call request logging remains deferred** (F1 decision, 2026-06-30) — F2 changes the parameters of an existing call, not the logging posture; the deferral stands until a Feature needs it operationally.
+
+## Feature-doc-gauntlet sign-off
+
+- **Result:** fail
+- **Date:** 2026-07-02
+- **Summary:** Seam review raised three blockers (no F2 Plan so the seam proofs are unanchored; the positional-"Today" contract is asserted, not proven; the cited 2026-07-02 fixtures were never committed) and the consistency check raised two (the PRD still assigns the daily Forecast to Feature 1; no F2 Plan at the gate); the doc/ADR check passed.
+- **Leaves:** check-seam-cynicism (fail), check-doc-adr-consistency (pass), check-artefact-consistency (fail)
+- **Open findings:**
+  1. *(check-seam-cynicism)* No F2 Plan exists (`docs/superpowers/plans/` holds only the F1 plan) — Seam 1 and Seam 2 each declare a (d) proof (Tier-1 recorded-replay fixtures, the de-DE locale-forcing test, the Tier-2 envelope extension) but no Plan Task carries them; both seams are Uncovered-in-the-Plan until `/writing-plans` runs.
+  2. *(check-seam-cynicism)* Seam 1's sub-contract "`daily.time[0]` is the Location's current calendar day under `timezone=auto`" — the sole basis for the positional "Today" label — is not discriminated by the cited London/Tokyo observation: at that instant both locations (and UTC) shared calendar day 2026-07-02, so the evidence is equally consistent with "UTC's today" or "server's today". *Settleable in-session:* re-run the read-only GET against a pair currently on different calendar days (e.g. Pacific/Kiritimati UTC+14 vs Pacific/Midway UTC−11) and capture the observed `time[0]` divergence as the (e) evidence.
+  3. *(check-seam-cynicism)* Seam 1 (d) cites "fixtures captured from the 2026-07-02 live calls", but no such fixture exists in the repo — `tests/WeatherApp.Tests/Fixtures/` holds only F1 payloads (`forecast-london.json` has `current` only, no `daily` block). *Settleable in-session:* re-issue the read-only current+daily GET and commit the raw response as the fixture.
+  4. *(check-artefact-consistency)* PRD.md still says the 7-day daily Forecast is "a later Feature-1 slice" / "Feature 1" in two places, while the Roadmap and both specs assign it to Feature 2 — stale PRD narrative that, left as-is, gives an agent trusting the PRD (higher authority than Roadmap/Spec) the wrong feature ownership for exactly F2's scope. Update the two PRD sentences to name Feature 2 as a deliberate supersession.
+  5. *(check-artefact-consistency)* No Plan exists for Feature 2 at the feature-docs gate — the gauntlet is defined to run after both `/brainstorming` and `/writing-plans`; `publish-feature` embeds the Plan and `enate-to-stories` halts without one. Run `/writing-plans` for F2, then re-run the gauntlet in full.
+
+The Feature is **not cleared** for `/publish-feature` / `enate-to-stories`. Root-cause routing: findings 1 and 5 are the same root cause — `/writing-plans` has not run for F2 (that is the fix, not `/fix-feature-docs`); findings 2–4 feed `/fix-feature-docs` (2 and 3 are settleable in-session). Re-run `/feature-doc-gauntlet` in full afterwards.
