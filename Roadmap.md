@@ -1,7 +1,7 @@
 # Roadmap
 
 **Product:** Desktop Weather App — search a place, see its current weather and forecast (Windows / WPF / Open-Meteo).
-**Last reviewed:** 2026-06-29
+**Last reviewed:** 2026-07-02
 
 ## Sequencing
 

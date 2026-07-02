@@ -808,26 +808,30 @@ Rewrite the three remaining `GetCurrent` failure-path tests against `GetWeather`
 
 - [ ] **Step 5: Point the Tier-2 live test at the full envelope**
 
-In `tests/WeatherApp.Tests/Live/OpenMeteoLiveTests.cs`, replace `Weather_provider_returns_conditions_for_coords` with:
+In `tests/WeatherApp.Tests/Live/OpenMeteoLiveTests.cs`, replace `Weather_provider_returns_conditions_for_coords` with a **raw-envelope** test (add `using System.Text.Json;` to the file). One raw GET replaces the through-provider call because `daily_units` — the spec's hook for asserting the metric params took effect on the daily half (Seam 1 (c)) — is deliberately never deserialized by the DTO, so only a raw read can see it. Same single forecast call per run; the Tier-2 cost ceiling is unchanged. The domain *mapping* of this same envelope is Tier-1's job (the recorded-replay tests of Tasks 2–4):
 
 ```csharp
     [Fact]
-    public async Task Weather_provider_returns_current_and_seven_daily_entries()
+    public async Task Forecast_endpoint_returns_the_current_plus_daily_envelope()
     {
         using var http = new HttpClient { BaseAddress = new Uri("https://api.open-meteo.com/") };
-        var provider = new OpenMeteoWeatherProvider(http, new WmoConditionMap());
+        var json = await http.GetStringAsync(
+            "v1/forecast?latitude=51.5085&longitude=-0.1257&current=temperature_2m,weather_code,wind_speed_10m" +
+            "&daily=temperature_2m_max,temperature_2m_min,weather_code&temperature_unit=celsius&wind_speed_unit=kmh&timezone=auto");
+        using var doc = JsonDocument.Parse(json);
+        var root = doc.RootElement;
 
-        var report = await provider.GetWeather(new Location("London", 51.5085, -0.1257), CancellationToken.None);
-
-        // Shape, not value (spec Seam 1 envelope): the current half still maps, and
-        // the daily half arrives as 7 zippable entries whose Conditions all mapped —
-        // proving the four parallel arrays were present, equal-length and parseable.
-        // Same single forecast call as before (more params), so the Tier-2 cost
-        // ceiling is unchanged. Never assert volatile temperatures or conditions.
-        report.Current.Condition.Should().NotBeNullOrEmpty();
-        report.Daily.Should().HaveCount(7);
-        report.Daily.Should().OnlyContain(d => !string.IsNullOrEmpty(d.Condition));
-        report.Daily[0].Date.DayNumber.Should().BeGreaterThan(new DateOnly(2026, 1, 1).DayNumber); // a real, parsed date
+        // Envelope only (spec Seam 1): shape, types and units — never volatile values.
+        var daily = root.GetProperty("daily");
+        daily.GetProperty("time").GetArrayLength().Should().Be(7);
+        daily.GetProperty("temperature_2m_max").GetArrayLength().Should().Be(7);
+        daily.GetProperty("temperature_2m_min").GetArrayLength().Should().Be(7);
+        daily.GetProperty("weather_code").GetArrayLength().Should().Be(7);
+        daily.GetProperty("time")[0].GetString().Should().MatchRegex(@"^\d{4}-\d{2}-\d{2}$");   // ISO yyyy-MM-dd wire format (Seam 2's input)
+        var units = root.GetProperty("daily_units");
+        units.GetProperty("temperature_2m_max").GetString().Should().Be("°C");   // metric params took effect on the daily half
+        units.GetProperty("temperature_2m_min").GetString().Should().Be("°C");
+        root.GetProperty("current").GetProperty("temperature_2m").ValueKind.Should().Be(JsonValueKind.Number);   // the F1 half is still present
     }
 ```
 
@@ -839,7 +843,7 @@ Expected: PASS — no remaining reference to `GetCurrent` anywhere in the soluti
 - [ ] **Step 7: Run the Tier-2 live test once, supervised** (network required; skip in a sandboxed run and note it in the PR)
 
 Run: `dotnet test tests/WeatherApp.Tests/WeatherApp.Tests.csproj --filter Tier=Live`
-Expected: PASS — 3 live tests (the 2 F1 ones + the reshaped forecast test).
+Expected: PASS — 2 live tests (the F1 geocoder test + the reshaped forecast-envelope test, which *replaced* the F1 forecast test in Step 5).
 
 - [ ] **Step 8: Commit**
 
@@ -947,7 +951,7 @@ git commit -m "feat: 7-day daily Forecast strip in the weather view (F2)"
 ## Done means
 
 - `dotnet test WeatherApp.sln --filter Tier!=Live` green on Windows (the full Tier-1 suite, including the new Seam 1/Seam 2 recorded-replay tests).
-- `dotnet test WeatherApp.sln --filter Tier=Live` green (3 live tests; the forecast one now asserts the daily envelope).
+- `dotnet test WeatherApp.sln --filter Tier=Live` green (2 live tests; the forecast one now asserts the raw daily envelope, including `daily_units` echoing `°C`).
 - `grep -rn "GetCurrent" src/ tests/` returns nothing — one fetch path.
 - Tier-3: the running app shows the strip per Task 7 Step 4.
 - No weather payload persisted anywhere (ADR-0001) — F2 adds no storage code at all.

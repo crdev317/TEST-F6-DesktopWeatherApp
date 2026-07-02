@@ -66,7 +66,7 @@ Per the Technical-Context standard: assert the **deterministic envelope**, never
 - **WMO Condition map** — already covered by F1; daily reuses it. No new tests beyond any codes the daily fixture surfaces.
 - **WeatherViewModel** (provider faked) — `Loaded` exposes both `Conditions` and `Forecast`; the failure path is unchanged (fixed neutral line, no exception text/URL).
 
-**Tier-2 (live, scheduled, bounded):** extend the existing `OpenMeteoLiveTests` forecast call with the daily params; assert envelope only — `daily` present, four equal-length arrays, 7 entries, `daily_units` echoing `°C`, types/nullability — never values. Same call as before with more params, so the Tier-2 cost ceiling is unchanged (still one forecast call per run).
+**Tier-2 (live, scheduled, bounded):** reshape the existing `OpenMeteoLiveTests` forecast call into a **raw-envelope** GET carrying the daily params (raw JSON, not through the provider — `daily_units` is deliberately never deserialized by the DTO, so only a raw read can see it); assert envelope only — `daily` present, four equal-length arrays, 7 entries, `daily_units` echoing `°C`, types/nullability — never values. Same single forecast call per run, so the Tier-2 cost ceiling is unchanged.
 
 **Tier-3:** the shipped app, manual — search, pick, see Current Conditions and the week strip.
 
@@ -74,7 +74,7 @@ Per the Technical-Context standard: assert the **deterministic envelope**, never
 
 ## Seam inventory
 
-Two seams: the extended external network-protocol seam to the Open-Meteo forecast API (Seam 1 — superseding F1's Seam 2 contract), and the inbound host-OS/runtime locale seam on the daily date parse (Seam 2 — the inbound counterpart of F1's Seam 3). Both grounded by **live observation of the real Open-Meteo API on 2026-07-02** (two read-only GETs, captured during brainstorming with the human's approval) — not model memory. The in-process `WeatherViewModel → View` binding and the shell-mediated activation handoff are in-memory calls (code is the authority) and are deliberately excluded, as in F1.
+Two seams: the extended external network-protocol seam to the Open-Meteo forecast API (Seam 1 — superseding F1's Seam 2 contract), and the inbound host-OS/runtime locale seam on the daily date parse (Seam 2 — the inbound counterpart of F1's Seam 3). Both grounded by **live observation of the real Open-Meteo API on 2026-07-02** (four read-only GETs: London + Tokyo captured during brainstorming, and a cross-date Kiritimati/Midway pair captured during the same day's fix pass, all with the human's approval) — not model memory. The in-process `WeatherViewModel → View` binding and the shell-mediated activation handoff are in-memory calls (code is the authority) and are deliberately excluded, as in F1.
 
 **Auth:** inherited by reference from the F1 pin — Open-Meteo offers **no authentication**; we send none. Re-confirmed live 2026-07-02: unauthenticated GETs returned 200 with data.
 
@@ -84,7 +84,7 @@ Two seams: the extended external network-protocol seam to the Open-Meteo forecas
 - **(c) contract:** HTTPS `GET /v1/forecast?latitude=<lat>&longitude=<lon>&current=temperature_2m,weather_code,wind_speed_10m&daily=temperature_2m_max,temperature_2m_min,weather_code&temperature_unit=celsius&wind_speed_unit=kmh&timezone=auto`, no auth. Outbound coordinates invariant-formatted (F1 Seam 3, unchanged).
   - **Success (HTTP 200):** JSON object containing everything F1's Seam 2 pinned for `current`/`current_units`, **plus**:
     - **`daily`** (object, present because requested — treat absence as malformed → load failure): four **parallel arrays of equal length** — `time[]` (ISO `yyyy-MM-dd` strings, non-null), `temperature_2m_max[]` (numbers, non-null), `temperature_2m_min[]` (numbers, non-null), `weather_code[]` (integer WMO codes, non-null). Observed length **7** with no `forecast_days` param; the client requires equal lengths (else load failure) but tolerates a count other than 7.
-    - **`daily[time][0]` is the Location's current calendar day** when `timezone=auto` is sent — the basis for the positional "Today" label. Proven by the cross-timezone observation below.
+    - **`daily[time][0]` is the Location's current calendar day** when `timezone=auto` is sent — the basis for the positional "Today" label. Proven by the cross-date observation below: two Locations on *different* calendar days at the same instant returned diverging `time[0]` values, which falsifies the rival "UTC's today" / "server's today" hypotheses.
     - **`daily_units`** (object, non-null) echoes the units (`temperature_2m_max: "°C"`, `temperature_2m_min: "°C"`, `time: "iso8601"`) — the test's hook for asserting the metric params took effect on the daily half.
     - **`timezone`** (string, non-null, e.g. `"Europe/London"`, `"Asia/Tokyo"`) and **`utc_offset_seconds`** (integer) echo the resolved Location-local zone.
     - Returned `latitude`/`longitude` may be **grid-snapped** (observed: 51.5085/−0.1257 → 51.5/−0.25); we do not assert request==response coords.
@@ -93,6 +93,7 @@ Two seams: the extended external network-protocol seam to the Open-Meteo forecas
 - **(e) authority:** Open-Meteo Forecast API — live observation on 2026-07-02, two read-only GETs:
   - London (51.5085, −0.1257): HTTP 200 with `daily.time = ["2026-07-02" … "2026-07-08"]` (7 entries), `daily_units.temperature_2m_max = "°C"`, `timezone = "Europe/London"`, `current.time = "2026-07-02T10:30"` local.
   - Tokyo (35.6895, 139.6917): HTTP 200, `timezone = "Asia/Tokyo"`, `utc_offset_seconds = 32400`, `current.time = "2026-07-02T18:30"` — the same instant rendered Location-local (18:30 vs London's 10:30), proving `timezone=auto` aggregates in the Location's zone, with `daily.time[0] = "2026-07-02"` (Tokyo's current day).
+  - **Cross-date pair (fix pass, 2026-07-02, ~12:15 UTC, human-approved read-only GETs)** — the discriminating observation for the positional-"Today" sub-contract: Kiritimati (1.8721, −157.4278; UTC+14) returned HTTP 200 with `timezone = "Pacific/Kiritimati"`, `utc_offset_seconds = 50400`, `current.time = "2026-07-03T02:15"`, `daily.time[0] = "2026-07-03"`, while Midway (28.2072, −177.3735; UTC−11) at the same instant returned `timezone = "Pacific/Midway"`, `utc_offset_seconds = −39600`, `current.time = "2026-07-02T01:15"`, `daily.time[0] = "2026-07-02"`. The two `time[0]` values **diverge by the Locations' own calendar days** — a UTC-day or server-day boundary would have yielded `"2026-07-02"` for both. `daily_units.temperature_2m_max = "°C"` echoed on both, re-confirming the metric params on the daily half.
   - Cross-references the public docs at open-meteo.com/en/docs (daily parameter set, `timezone=auto` behaviour).
 
 ### Seam 2: Daily date parse ↔ host locale
